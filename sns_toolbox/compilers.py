@@ -5,7 +5,7 @@ import numpy as np
 import sys
 import warnings
 
-def __compile_numpy__(network, dt=0.01, debug=False) -> SNS_Numpy:
+def __compile_numpy__(network, dt=0.01, debug=False, STDP_PRE=None, STDP_POST=None, STDP_LTP_A=None, STDP_LTP_T=None, STDP_LTD_A=None, STDP_LTD_T=None, MAX_CONDUCTIVITY=None) -> SNS_Numpy:
     if debug:
         print('-------------------------------------------------------------------------------------------------------')
         print('COMPILING NETWORK USING NUMPY:')
@@ -84,7 +84,18 @@ def __compile_numpy__(network, dt=0.01, debug=False) -> SNS_Numpy:
         IN2_spike_diff = []
         IN3_spike_diff = []
         IN4_spike_diff = []
-        
+
+        # V2 Additions
+        # Defining of initial values
+        # Matrix of spike time differences. A column shows a Pre's relative spike time to the Post's
+        PRE_spike_diff = np.ones(shape=[STDP_PRE, STDP_POST]) * 100 # Buffer added so more recent spike time is not 0.0ms
+        POST_spike_diff = np.ones(shape=[STDP_POST, STDP_PRE]) * 100 # Buffer added
+        POST_counter = np.ones(STDP_POST) * 51 # Add buffer so that neurons can spike when the code begins
+        STDP_LTD_A = STDP_LTD_A # STDP Parameter
+        STDP_LTP_A = STDP_LTP_A # STDP Parameter
+        STDP_LTP_T = STDP_LTP_T # STDP Parameter
+        STDP_LTD_T = STDP_LTD_T # STDP Parameter
+        MAX_CONDUCTIVITY = MAX_CONDUCTIVITY # STDP Parameter
 
         theta_0 = np.zeros(num_neurons)
         theta = np.zeros(num_neurons)
@@ -456,6 +467,19 @@ def __compile_numpy__(network, dt=0.01, debug=False) -> SNS_Numpy:
         params['in2_spike_diff'] = IN2_spike_diff
         params['in3_spike_diff'] = IN3_spike_diff
         params['in4_spike_diff'] = IN4_spike_diff
+
+        # Dictionary Definition
+        # V2 Additions
+        params['pre_spike_diff'] = PRE_spike_diff
+        params['post_spike_diff'] = POST_spike_diff
+        params['post_counter'] = POST_counter
+        params['num_pre'] = STDP_PRE
+        params['num_post'] = STDP_POST
+        params['ltp_a'] = STDP_LTP_A
+        params['ltp_t'] = STDP_LTP_T
+        params['ltd_a'] = STDP_LTD_A
+        params['ltd_t'] = STDP_LTD_T
+        params['max_conductance'] = MAX_CONDUCTIVITY
 
         params['theta0'] = theta_0
         params['theta'] = theta
@@ -1080,6 +1104,19 @@ def __compile_numpy_standard__(network, dt=0.01, debug=False) -> SNS_Numpy_stand
         params['in2_spike_diff'] = None
         params['in3_spike_diff'] = None
         params['in4_spike_diff'] = None
+
+        # V2 Additions
+        params['pre_spike_diff'] = None
+        params['post_spike_diff'] = None
+        params['post_counter'] = None
+        params['num_pre'] = None
+        params['num_post'] = None
+        params['ltp_a'] = None
+        params['ltp_t'] = None
+        params['ltd_a'] = None
+        params['ltd_t'] = None
+        params['max_conductance'] = None
+
     if delay:
         params['spikeDelays'] = spike_delays
         params['spikeRows'] = spike_rows

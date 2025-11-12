@@ -634,14 +634,14 @@ class Network:
     #     self.graph.format = imgFormat
     #     self.graph.render(view=view,cleanup=True)
 
-    def compile(self, dt=0.01, backend='numpy', device='cpu', debug=False, return_params=False) -> Backend:
+    def compile(self, dt=0.01, backend='numpy', device='cpu', debug=False, return_params=False, STDP_PRE=None, STDP_POST=None, STDP_LTP_A=None, STDP_LTP_T=None, STDP_LTD_A=None, STDP_LTD_T=None, MAX_CONDUCTIVITY=None) -> Backend:
         if not isinstance(backend, str):
             raise TypeError(
                 'Backend selection must be a string. Options are \'numpy\', \'torch\', \'sparse\', or \'iterative\'')
         if backend == 'numpy':
             if device != 'cpu':
                 warnings.warn('Warning: Only CPU device is supported with SNS_Numpy. Switching to CPU')
-            model = __compile_numpy__(self, dt=dt, debug=debug)
+            model = __compile_numpy__(self, dt=dt, debug=debug, STDP_PRE=STDP_PRE, STDP_POST=STDP_POST, STDP_LTP_A=STDP_LTP_A, STDP_LTP_T=STDP_LTP_T, STDP_LTD_A=STDP_LTD_A, STDP_LTD_T=STDP_LTD_T, MAX_CONDUCTIVITY=MAX_CONDUCTIVITY)
         elif backend == 'numpy_standard':
             if device != 'cpu':
                 warnings.warn('Warning: Only CPU device is supported with SNS_Numpy_standard. Switching to CPU')

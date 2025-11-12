@@ -25,6 +25,7 @@ class Backend:
     def forward(self, x=None, current_time=None, dt=None, dynamic_threshold=None, g_update=None):
         raise NotImplementedError
 
+    # Sets "self." parameters as pulled from dictionary in "/compilers.py" file. Variables need to be defined in dict
     def set_params(self, params: Dict) -> None:
         self.dt = params['dt']
         self.name = params['name']
@@ -59,14 +60,26 @@ class Backend:
 
             # Mark added these
             self.spike_time = params['spikeTime']
-            self.POST1_spike_diff = params['post1_spike_diff']
-            self.POST2_spike_diff = params['post2_spike_diff']
-            self.POST1_counter = params['post1_counter']
-            self.POST2_counter = params['post2_counter']
-            self.IN1_spike_diff = params['in1_spike_diff']
-            self.IN2_spike_diff = params['in2_spike_diff']
-            self.IN3_spike_diff = params['in3_spike_diff']
-            self.IN4_spike_diff = params['in4_spike_diff']
+            # self.POST1_spike_diff = params['post1_spike_diff']
+            # self.POST2_spike_diff = params['post2_spike_diff']
+            # self.POST1_counter = params['post1_counter']
+            # self.POST2_counter = params['post2_counter']
+            # self.IN1_spike_diff = params['in1_spike_diff']
+            # self.IN2_spike_diff = params['in2_spike_diff']
+            # self.IN3_spike_diff = params['in3_spike_diff']
+            # self.IN4_spike_diff = params['in4_spike_diff']
+
+            # V2
+            self.pre_spike_diff = params['pre_spike_diff']
+            self.post_spike_diff = params['post_spike_diff']
+            self.post_counter = params['post_counter']
+            self.num_pre = params['num_pre']
+            self.num_post = params['num_post']
+            self.ltp_a = params['ltp_a']
+            self.ltp_t = params['ltp_t']
+            self.ltd_a = params['ltd_a']
+            self.ltd_t = params['ltd_t']
+            self.max_conductance = params['max_conductance']
 
             self.theta_0 = params['theta0']
             self.theta = params['theta']
@@ -120,6 +133,7 @@ class Backend:
             self.c_gate_last = params['cGateLast']
             self.c_gate_0 = params['cGate0']
 
+    # This runs when the compiled network is called to step the simulation forward
     def __call__(self, x=None, current_time=None, dt=None, dynamic_threshold=None, g_update=None):
         return self.forward(x, current_time, dt, dynamic_threshold, g_update)
 
@@ -134,6 +148,7 @@ class SNS_Numpy(Backend):
     def __init__(self, params: Dict) -> None:
         super().__init__(params)
 
+    ''' This completes one timestep of the simulation. Variables are carried from one call to the next '''
     def forward(self, x=None, current_time=None, dt=None, dynamic_threshold=None, g_update=None):
         self.V_last = np.copy(self.V)
         if x is None:
@@ -153,6 +168,7 @@ class SNS_Numpy(Backend):
         """
         if g_update is not None:
             if g_update.shape == self.g_increment.shape: 
+                # Force change the conductivity matrix used in calculations
                 self.g_increment = g_update
                 self.g_max_spike = g_update
             else:
@@ -172,32 +188,17 @@ class SNS_Numpy(Backend):
         # YES
         i_syn = np.sum(g_syn * self.del_e, axis=1) - self.V_last * np.sum(g_syn, axis=1)
 
-        """
-        Refractory Period
-        """
-        # This is not currently working as a variable. Just 10Hz. Do not change, it will not do what you want it to do
-        max_spiking_frequency = 10 # Hz
-
-        # Checks the spiking condition of the last iteration of the loop
-        # If POST1 has spiked, set the counter to zero.
-        if self.spikes[4] != 0:
-            self.POST1_counter = 0
-        if self.spikes[5] != 0:
-            self.POST2_counter = 0
-        
-        # If the counter has not reached its 10ms time period, run this code
-        if self.POST1_counter < int(max_spiking_frequency / dt):
-            # Step up the counter by one
-            self.POST1_counter += 1
-            # Set the current to the neuron to zero
-            i_syn[4] = 0.0
-
-        # If the counter has not reached its 10ms time period, run this code
-        if self.POST2_counter < int(max_spiking_frequency/dt):
-            # Step up the counter by one
-            self.POST2_counter += 1
-            # Set the current to the neuron to zero
-            i_syn[5] = 0.0
+        """ Refractory Period """
+        # If a postsynaptic neuron spiked within the past 30 time steps, do not allow any current to pass to it
+        # Check over all postsynaptic neurons
+        for post in range(self.num_post):
+            # If a specific postsynaptic neuron's counter is less than 30 loop iterations
+            if self.post_counter[post] < 30:
+                # Up the counter by one
+                self.post_counter[post] += 1
+                # print('POST COUNTER: ' + str(self.post_counter[post]) + ' At Time: ' + str(current_time))
+                # Prevent the neuron from receiving input current
+                i_syn[self.num_pre + post] = 0
 
         """ END OF REFRACTORY PERIOD CODE """
         
@@ -262,86 +263,103 @@ class SNS_Numpy(Backend):
             self.theta = np.maximum(self.theta_increment, self.theta_floor-self.theta)*(-self.spikes) + self.theta
         
         # YES
-        self.outputs = np.matmul(self.output_voltage_connectivity, self.V)
+        self.outputs = np.matmul(self.output_voltage_connectivity, self.V) # Voltage outputs
         
         """
         STDP CODE
-        CHECKS SPIKING, RECORDS SPIKE TIME IN self.spike_time
+        VERSION 2
+        FOR DYNAMIC NETWORK SIZES 
         """
-        # Spikes only show up after line 200 for the rest of the loop. 
         if self.spiking:
-            # IN1, IN2, IN3, IN4, POST1, POST2
-            if np.sum(self.spikes) != 0:
-                # print('Spike')
-                if current_time is not None:
-                    for i in range(len(self.spikes)):
-                        # Checks to see if there is a spike in the current slot
-                        if self.spikes[i] != 0:
-                            self.spike_time[i] = -self.spikes[i] * current_time
+            # Checking PRE spikes LTD
+            if np.sum(self.spikes[0:self.num_pre]) != 0:
+                for i in range(self.num_pre):
+                    # Check if PRE neuron i has spiked. If so, proceed
+                    if self.spikes[i] != 0:
+                        # If PRE neuron i has spiked, record that time in the spike_time matrix. This matrix records
+                        # most recent spike times
+                        self.spike_time[i] = current_time
 
-                            """ IN1 Spike Time Difference """
-                            if i == 0:
-                                self.IN1_spike_diff = []
-                                # Just checking POST1 and POST2
-                                for i in range(4, 6):
-                                    self.IN1_spike_diff.append(self.spike_time[0] - self.spike_time[i])
-                                # print(self.IN1_spike_diff)
+                        # Since neuron i spiked, we can update the matrix of its relative spike times to the POST neurons
+                        post_matrix = []
+                        # For each postsynaptic neuron, calculate how long ago it spiked relative to now (PRE Spike)
+                        for post in range(self.num_pre, self.num_pre + self.num_post):
+                            post_matrix.append(self.spike_time[i] - self.spike_time[post])
+                        self.pre_spike_diff[i] = post_matrix
 
-                            """ IN2 Spike Time Difference """
-                            if i == 1:
-                                self.IN2_spike_diff = []
-                                # Just checking POST1 and POST2
-                                for i in range(4, 6):
-                                    self.IN2_spike_diff.append(self.spike_time[1] - self.spike_time[i])
-                                # print(self.IN2_spike_diff)
+                        # print('PreSpike. Time to most recent POST Spike')
+                        # print(self.pre_spike_diff[i])
 
-                            """ IN3 Spike Time Difference """
-                            if i == 2:
-                                self.IN3_spike_diff = []
-                                # Just checking POST1 and POST2
-                                for i in range(4, 6):
-                                    self.IN3_spike_diff.append(self.spike_time[2] - self.spike_time[i])
-                                # print(self.IN3_spike_diff)
+                        # Determine LTD. Iterate over all post-before-pre dt's
+                        for j in range(self.num_post):
+                            # If the post-before-pre is too great. Ignore
+                            if post_matrix[j] < 30:
+                                # Calculate weight update
+                                weight_change = -self.ltd_a * np.exp(-post_matrix[j] / self.ltd_t)
+                                # Apply weight update
+                                self.g_max_spike[j + self.num_pre, i] = self.g_max_spike[j + self.num_pre, i] + weight_change
+                                self.g_increment[j + self.num_pre, i] = self.g_increment[j + self.num_pre, i] + weight_change
+                                # Check to ensure in bounds
+                                if self.g_max_spike[j + self.num_pre, i] < 0.0:
+                                    self.g_max_spike[j + self.num_pre, i] = 0.0
+                                if self.g_max_spike[j + self.num_pre, i] > self.max_conductance:
+                                    self.g_max_spike[j + self.num_pre, i] = self.max_conductance
+                                if self.g_increment[j + self.num_pre, i] < 0.0:
+                                    self.g_increment[j + self.num_pre, i] = 0.0
+                                if self.g_increment[j + self.num_pre, i] > self.max_conductance:
+                                    self.g_increment[j + self.num_pre, i] = self.max_conductance
+                                
+                                # print('CONDUCTANCE UPDATE! By: ' + str(weight_change))
 
-                            """ IN4 Spike Time Difference """
-                            if i == 3:
-                                self.IN4_spike_diff = []
-                                # Just checking POST1 and POST2
-                                for i in range(4, 6):
-                                    self.IN4_spike_diff.append(self.spike_time[3] - self.spike_time[i])
-                                # print(self.IN4_spike_diff)
 
 
-                            """ POST1 Spike Time Difference """
-                            if i == 4:
-                                self.POST1_spike_diff = []
-                                for i in range(4):
-                                    if self.spike_time[i] != 0:
-                                        self.POST1_spike_diff.append(self.spike_time[i] - self.spike_time[4])
-                                    else:
-                                        self.POST1_spike_diff.append(None)
-                                # print('Post 1 Spiked')
-                                # print(POST1_spike_diff)
-                                # print(self.spike_time)
 
-                            """ POST2 Spike Time Difference """
-                            if i == 5:
-                                self.POST2_spike_diff = []
-                                for i in range(4):
-                                    if self.spike_time[i] != 0:
-                                        self.POST2_spike_diff.append(self.spike_time[i] - self.spike_time[5])
-                                    else:
-                                        self.POST2_spike_diff.append(-100)
-                                # print('Post 2 Spiked')
-                                # print(POST2_spike_diff)
-                                # print(self.spike_time)
 
-                    # print(self.spike_time)
-        """ END OF MY ADDED SPIKE TIME DIFFERENCE CODE """
+                # print('PRE SPIKE: How long ago a postsynaptic neuron spiked')
+                # print(self.pre_spike_diff)
+            
+            # Checking POST spikes LTP
+            if np.sum(self.spikes[self.num_pre:]) != 0:
+                for i in range(self.num_pre, self.num_pre + self.num_post):
+                    if self.spikes[i] != 0:
+                        self.spike_time[i] = current_time
 
+                        pre_matrix = []
+                        for pre in range(0, self.num_pre):
+                            pre_matrix.append(self.spike_time[i] - self.spike_time[pre])
+                        self.post_spike_diff[i - self.num_pre] = pre_matrix
+
+                        # Reset the postsynaptic counter
+                        self.post_counter[i - self.num_pre] = 0
+
+                        # print('POST SPIKE. Time to most recent PRE spike')
+                        # print(self.post_spike_diff[i - self.num_pre])
+
+                        # Determine LTP. Iterate over all pre-before-post dt's
+                        for j in range(self.num_pre):
+                            # If the pre-before-post time difference is too great, ignore
+                            if pre_matrix[j] < 40:
+                                # Calculate weight update
+                                weight_change = self.ltp_a * np.exp(-pre_matrix[j] / self.ltp_t)
+                                # Apply weight update
+                                self.g_max_spike[i, j] = self.g_max_spike[i, j] + weight_change
+                                self.g_increment[i, j] = self.g_increment[i, j] + weight_change
+                                # Check to ensure in bounds
+                                if self.g_max_spike[i, j] < 0.0:
+                                    self.g_max_spike[i, j] = 0.0
+                                if self.g_max_spike[i, j] > self.max_conductance:
+                                    self.g_max_spike[i, j] = self.max_conductance
+                                if self.g_increment[i, j] < 0.0:
+                                    self.g_increment[i, j] = 0.0
+                                if self.g_increment[i, j] > self.max_conductance:
+                                    self.g_increment[i, j] = self.max_conductance
+                                                        
+                                # print('CONDUCTANCE UPDATE! By: ' + str(weight_change))
+        """ END OF STDP CODE """
+        
         # YES
         if self.spiking:
-            self.outputs += np.matmul(self.output_spike_connectivity, -self.spikes)
+            self.outputs += np.matmul(self.output_spike_connectivity, -self.spikes) # Spike outputs
 
         return self.outputs
 
