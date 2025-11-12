@@ -1,7 +1,11 @@
 # Spike Timing Dependent Plasticity (STDP) Thesis Work
 Completed at the Agile and Adaptive Robotics Lab at Portland State University
-thesis writer and developer: Mark Pupkiewicz
-maintainer: Algorithm Rae Parsons
+
+## Thesis Wrtier and Developer
+[Mark Pupkiewicz](https://github.com/Lieutenant-CommanderData)
+
+## Maintainer
+[Algorithm Rae Parsons](https://github.com/algorithmraeparsons)
 
 # Dependencies
 Graphviz python package
