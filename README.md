@@ -5,8 +5,11 @@ maintainer: Algorithm Rae Parsons
 
 # Dependencies
 Graphviz python package
+
 - Graphviz must be in system path outside of Python virtual environment
+
 Mujoco Python package
+
 Mediapy package
 
 # Credits
