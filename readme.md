@@ -1,14 +1,6 @@
 # STDP Code Base
 This provides an overview of the code for my thesis project, utilizing STDP to accomplish unsupervised learning in neural networks. 
 
----> Changes made in this branch <---
-This branch is a copy of the STDP Python branch used for my Thesis research with slight variations. I have begun to test the affect of mutually inhibitory synaptic connections between the Ia interneurons in the synthetic neural network which incorporates STDP learning. The population of Ia interneurons has been reduced to two to add clarity to interpreting the results/affect of learning on the connections in the network. Various code files have been modified, allowing for inspection of certain elements in the network as well as hardcoding changes to force specific scenarios for the network to approach. 
-
-Some changes to note:
-* In the network generation file for the STDP network, inhibitory connections are added, alongside voltage outputs to monitor the states of the interneurons.
-* In the randomized conductance generator function, the inhibitory connections are re-added to the matrix as it was overwriting them.
-* Additional plotting functions are added to monitor the spiking and voltage of the interneurons.
-
 ## STDPCODE Folder
 Contains the main python file ([main.py](main.py)) that runs the full simulation.
 
